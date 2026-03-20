@@ -670,13 +670,19 @@ function RiderView() {
       <div style={{ width: 390, height: 844, background: '#000', borderRadius: 36, border: `8px solid ${COLORS.surface2}`, boxShadow: `0 0 40px rgba(249,201,53,0.1)`, position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column', flexShrink: 0, animation: sosActivated ? 'meltdown 0.5s infinite alternate' : 'none' }}>
         
         {sosActivated && (
-          <div style={{ position: 'absolute', inset: 0, background: 'rgba(239,68,68,0.4)', zIndex: 100, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 32 }}>
-            <div style={{ background: '#000', padding: 32, borderRadius: 24, border: `4px solid ${COLORS.red}`, textAlign: 'center', boxShadow: '0 0 40px rgba(239,68,68,0.5)', animation: 'pulseRedRing 1s infinite' }}>
-              <div style={{ color: COLORS.red, fontSize: 64, marginBottom: 16 }}>🚨</div>
-              <div style={{ color: COLORS.red, fontWeight: 900, fontSize: 24, letterSpacing: 1, marginBottom: 12 }}>DISPATCHER AWARE</div>
-              <div style={{ color: '#fff', fontSize: 14, fontWeight: 'bold', letterSpacing: 1 }}>POLICE DEPLOYED</div>
-              <div style={{ background: COLORS.surface2, padding: '12px 24px', borderRadius: 12, marginTop: 24, border: `1px solid ${COLORS.border}` }}>
-                <div style={{ color: COLORS.accent, fontSize: 24, fontWeight: 900 }}>ETA: 2 MINS</div>
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0, 0, 0, 0.85)', backdropFilter: 'blur(8px)', zIndex: 100, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 32 }}>
+            <div style={{ background: COLORS.surface, padding: 32, width: '100%', borderRadius: 24, border: `1px solid ${COLORS.red}`, textAlign: 'center', boxShadow: '0 0 40px rgba(239,68,68,0.2)', animation: 'pulseRedRing 1.5s infinite' }}>
+              <div style={{ width: 64, height: 64, margin: '0 auto 20px', borderRadius: '50%', background: 'rgba(239, 68, 68, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: `1px solid rgba(239, 68, 68, 0.3)` }}>
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={COLORS.red} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                  <line x1="12" y1="9" x2="12" y2="13"/>
+                  <line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+              </div>
+              <div style={{ color: COLORS.red, fontWeight: 800, fontSize: 20, letterSpacing: 1, marginBottom: 8 }}>DISPATCHER AWARE</div>
+              <div style={{ color: COLORS.muted, fontSize: 13, fontWeight: 500, letterSpacing: 0.5, marginBottom: 24 }}>POLICE DEPLOYED</div>
+              <div style={{ background: 'rgba(239, 68, 68, 0.1)', padding: '16px', borderRadius: 12 }}>
+                <div style={{ color: COLORS.red, fontSize: 24, fontWeight: 800 }}>ETA: 2 MINS</div>
               </div>
             </div>
           </div>
