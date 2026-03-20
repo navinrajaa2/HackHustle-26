@@ -21,6 +21,14 @@ const STYLES = `
   .custom-leaflet-tooltip { background: transparent !important; border: none !important; box-shadow: none !important; }
   .custom-leaflet-tooltip::before { display: none !important; }
   .leaflet-container { background: #0D0D14; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  @keyframes marquee {
+    0% { transform: translateX(100%); }
+    100% { transform: translateX(-100%); }
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
   @keyframes pulseRedRing {
     0% { transform: scale(1); opacity: 0.8; }
     100% { transform: scale(2.2); opacity: 0; }
@@ -34,6 +42,11 @@ const STYLES = `
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
   }
+  @keyframes meltdown {
+    from { box-shadow: inset 0 0 0px #EF4444; background: #000; }
+    to { box-shadow: inset 0 0 100px #EF4444; background: #1a0505; }
+  }
+  .heatmap-blur { filter: blur(30px) opacity(0.7); mix-blend-mode: screen; }
   * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
   body { margin: 0; background: ${COLORS.bg}; color: ${COLORS.text}; }
   .hide-scrollbar::-webkit-scrollbar { display: none; }
@@ -59,9 +72,9 @@ const initialRiders = [
 ];
 
 const initialTrucks = [
-  { id: 't1', name: 'Raj Kumar', reg: 'TN01AB1234', route: 'Chennai to Coimbatore', progress: 55, speed: 62, fuel: 68, status: 'ACTIVE', lat: 13.0500, lng: 80.2100 },
-  { id: 't2', name: 'Murugan P', reg: 'TN07CD5678', route: 'Chennai to Madurai', progress: 20, speed: 78, fuel: 89, status: 'ALERT', lat: 13.0300, lng: 80.2300 },
-  { id: 't3', name: 'Selvam K', reg: 'TN22EF9012', route: 'Chennai to Salem', progress: 80, speed: 54, fuel: 31, status: 'ACTIVE', lat: 13.0100, lng: 80.2400 },
+  { id: 't1', name: 'Raj Kumar', reg: 'TN01AB1234', route: 'Chennai to Coimbatore', progress: 55, speed: 62, fuel: 68, status: 'ACTIVE', lat: 13.0500, lng: 80.2100, pathSegments: [[[13.0500, 80.2100],[12.9800, 80.1800], COLORS.green], [[12.9800, 80.1800],[12.9100, 80.1200], COLORS.amber], [[12.9100, 80.1200],[12.8500, 80.0500], COLORS.red]] },
+  { id: 't2', name: 'Murugan P', reg: 'TN07CD5678', route: 'Chennai to Madurai', progress: 20, speed: 78, fuel: 89, status: 'ALERT', lat: 13.0300, lng: 80.2300, pathSegments: [[[13.0300, 80.2300],[12.9500, 80.1900], COLORS.red], [[12.9500, 80.1900],[12.8800, 80.1500], COLORS.red]] },
+  { id: 't3', name: 'Selvam K', reg: 'TN22EF9012', route: 'Chennai to Salem', progress: 80, speed: 54, fuel: 31, status: 'ACTIVE', lat: 13.0100, lng: 80.2400, pathSegments: [[[13.0100, 80.2400],[12.9600, 80.1800], COLORS.green], [[12.9600, 80.1800],[12.9000, 80.1000], COLORS.green]] },
 ];
 
 const initialAlerts = [
@@ -130,20 +143,36 @@ for (let i = 0; i < 60; i++) {
 for (let i = 0; i < 30; i++) {
   const city = TN_CITIES[Math.floor(Math.random() * TN_CITIES.length)];
   const status = Math.random() < 0.1 ? 'ALERT' : 'ACTIVE';
-  initialTrucks.push({ id: `t_tn_${i}`, name: `TN TRK ${i}`, route: `${city.name} - Hub`, progress: Math.floor(Math.random()*100), speed: 40 + Math.floor(Math.random()*40), fuel: 20 + Math.floor(Math.random()*80), status, lat: city.lat + (Math.random()-0.5)*0.3, lng: city.lng + (Math.random()-0.5)*0.3 });
+  const startLat = city.lat + (Math.random()-0.5)*0.3;
+  const startLng = city.lng + (Math.random()-0.5)*0.3;
+  
+  const p1 = [startLat + (Math.random()-0.5)*0.1, startLng + (Math.random()-0.5)*0.1];
+  const p2 = [p1[0] + (Math.random()-0.5)*0.1, p1[1] + (Math.random()-0.5)*0.1];
+  
+  const colors = [COLORS.green, COLORS.amber, COLORS.red];
+  const pathSegments = [
+    [[startLat, startLng], p1, colors[Math.floor(Math.random()*3)]],
+    [p1, p2, colors[Math.floor(Math.random()*3)]]
+  ];
+
+  initialTrucks.push({ id: `t_tn_${i}`, name: `TN TRK ${i}`, route: `${city.name} - Hub`, progress: Math.floor(Math.random()*100), speed: 40 + Math.floor(Math.random()*40), fuel: 20 + Math.floor(Math.random()*80), status, lat: startLat, lng: startLng, pathSegments });
 }
 
 export default function SafeRouteDemo() {
   const [activeTab, setActiveTab] = useState(0);
   const [riders, setRiders] = useState(initialRiders);
-  const [trucks] = useState(initialTrucks);
+  const [trucks, setTrucks] = useState(initialTrucks);
   const [zones] = useState(initialZones);
   const [alerts] = useState(initialAlerts);
   const [liveLogs, setLiveLogs] = useState(initialLiveLogs);
   const [selectedZone, setSelectedZone] = useState(null);
   const [hoveredZone, setHoveredZone] = useState(null);
+  const [tickerIndex, setTickerIndex] = useState(0);
+  const [showHeatmap, setShowHeatmap] = useState(false);
   
   const cycleIndexRef = useRef(0);
+
+  // Removed triggerCrisis
 
   useEffect(() => {
     const int1 = setInterval(() => {
@@ -167,9 +196,31 @@ export default function SafeRouteDemo() {
       });
     }, 30000);
 
+    const int3 = setInterval(() => {
+      // Rotate ticker
+      setTickerIndex(prev => (prev + 1) % alerts.length);
+      
+      // Simulate live GPS movement every 3 seconds
+      setTrucks(prev => prev.map(t => {
+        if (t.status === 'ACTIVE') {
+          if (t.pathSegments && t.pathSegments.length > 0) {
+            const dest = t.pathSegments[0][1];
+            // Move 5% towards route destination per tick
+            const latStep = (dest[0] - t.lat) * 0.05;
+            const lngStep = (dest[1] - t.lng) * 0.05;
+            return { ...t, lat: t.lat + latStep, lng: t.lng + lngStep };
+          }
+          return { ...t, lat: t.lat + (Math.random() - 0.5) * 0.005, lng: t.lng + (Math.random() - 0.5) * 0.005 };
+        }
+        return t;
+      }));
+      setRiders(prev => prev.map(r => r.status === 'ACTIVE' ? { ...r, lat: r.lat + (Math.random() - 0.5) * 0.002, lng: r.lng + (Math.random() - 0.5) * 0.002 } : r));
+    }, 3000);
+
     return () => {
       clearInterval(int1);
       clearInterval(int2);
+      clearInterval(int3);
     };
   }, []);
 
@@ -206,6 +257,12 @@ export default function SafeRouteDemo() {
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
+          {activeTab === 0 && (
+            <button onClick={() => setShowHeatmap(!showHeatmap)} style={{ background: showHeatmap ? COLORS.accent : 'transparent', color: showHeatmap ? '#000' : COLORS.accent, border: `1px solid ${COLORS.accent}`, padding: '6px 16px', borderRadius: 4, fontWeight: 800, cursor: 'pointer', transition: 'all 0.2s', fontSize: 11 }}>
+              {showHeatmap ? 'HIDE HEATMAP' : 'THREAT HEATMAP'}
+            </button>
+          )}
+          {/* Removed Simulate Crisis Button */}
           <StatChip label="Active Trucks" val={trucks.length} color={COLORS.accent} />
           <StatChip label="Active Riders" val={riders.length} color={COLORS.accent} />
           <StatChip label="Red Zones" val={zones.filter(z => z.tier === 'RED').length} color={COLORS.red} />
@@ -224,10 +281,11 @@ export default function SafeRouteDemo() {
             riders={riders} trucks={trucks} zones={zones} alerts={alerts} liveLogs={liveLogs}
             selectedZone={selectedZone} setSelectedZone={setSelectedZone}
             hoveredZone={hoveredZone} setHoveredZone={setHoveredZone}
+            showHeatmap={showHeatmap}
           />
         )}
         {activeTab === 1 && <RiderView />}
-        {activeTab === 2 && <GovtViewer zones={zones} alerts={alerts} />}
+        {activeTab === 2 && <GovtViewer zones={zones} alerts={alerts} tickerIndex={tickerIndex} />}
       </div>
     </div>
   );
@@ -244,7 +302,10 @@ function StatChip({ label, val, color }) {
 
 // --- TAB 1: OPS DASHBOARD ---
 
-function OpsDashboard({ riders, trucks, zones, alerts, liveLogs, selectedZone, setSelectedZone, hoveredZone, setHoveredZone }) {
+function OpsDashboard({ riders, trucks, zones, alerts, liveLogs, selectedZone, setSelectedZone, hoveredZone, setHoveredZone, showHeatmap }) {
+  const [trackedId, setTrackedId] = useState(null);
+  const [sidebarTab, setSidebarTab] = useState('TRUCKS');
+  
   const sortedRiders = [...riders].sort((a, b) => {
     const pA = a.status === 'SOS' ? 3 : a.status === 'IDLE' ? 2 : 1;
     const pB = b.status === 'SOS' ? 3 : b.status === 'IDLE' ? 2 : 1;
@@ -287,14 +348,24 @@ function OpsDashboard({ riders, trucks, zones, alerts, liveLogs, selectedZone, s
 
     // 2. Zones
     zones.forEach(z => {
-      const color = getTierColor(z.tier);
       const isRed = z.tier === 'RED';
+      const color = z.tier === 'RED' ? COLORS.red : z.tier === 'AMBER' ? COLORS.amber : COLORS.green;
+      const opacity = isRed ? 0.2 : 0.05;
       
-      if (isRed) {
-        L.circle([z.lat, z.lng], { radius: z.radius + 300, color, weight: 1, dashArray: '4,4', fill: false, opacity: 0.3 }).addTo(group);
+      const zoneCircle = L.circle([z.lat, z.lng], {
+        color: color,
+        fillColor: color,
+        fillOpacity: opacity,
+        radius: z.radius,
+        weight: isRed ? 2 : 1,
+        dashArray: isRed ? '' : '4,8'
+      }).addTo(group);
+
+      if (showHeatmap && z.tier !== 'GREEN') {
+        const heatColor = z.tier === 'RED' ? '#ff0000' : '#ffa500';
+        L.circle([z.lat + 0.01, z.lng + 0.01], { radius: z.radius * 2.5, color: 'transparent', fillColor: heatColor, fillOpacity: 0.15, className: 'heatmap-blur' }).addTo(group);
+        L.circle([z.lat - 0.01, z.lng - 0.01], { radius: z.radius * 2, color: 'transparent', fillColor: heatColor, fillOpacity: 0.1, className: 'heatmap-blur' }).addTo(group);
       }
-      
-      const zoneCircle = L.circle([z.lat, z.lng], { radius: z.radius, color, fillColor: color, fillOpacity: 0.1, weight: 2, dashArray: isRed ? '4,4' : 'none' }).addTo(group);
       
       zoneCircle.on('click', () => setSelectedZone(z));
       zoneCircle.on('mouseover', () => setHoveredZone(z));
@@ -316,6 +387,27 @@ function OpsDashboard({ riders, trucks, zones, alerts, liveLogs, selectedZone, s
       const html = `<div style="width: 20px; height: 20px; border-radius: 50%; background: ${COLORS.surface}; border: 2px solid ${color}; display: flex; justify-content: center; align-items: center; color: white; font-size: 10px; font-weight: bold; ${isAlert ? 'box-shadow: 0 0 0 2px rgba(239,68,68,0.3);' : ''}">T</div>`;
       const icon = L.divIcon({ className: '', html, iconSize: [20, 20], iconAnchor: [10, 10] });
       L.marker([t.lat, t.lng], { icon }).addTo(group);
+      
+      // Draw per-segment route lines connecting origin to destination
+      if (t.pathSegments && t.pathSegments.length > 0) {
+        t.pathSegments.forEach((seg, idx) => {
+          // Keep the first point dynamically attached to the truck's live updating position
+          const firstPoint = idx === 0 ? [t.lat, t.lng] : seg[0];
+          L.polyline([firstPoint, seg[1]], { 
+            color: seg[2], 
+            weight: 3, 
+            opacity: 0.8, 
+            dashArray: seg[2] === COLORS.red ? '5,10' : '' 
+          }).addTo(group);
+        });
+
+        // Add Pinpoint at final destination
+        const lastSegment = t.pathSegments[t.pathSegments.length - 1];
+        const destPoint = lastSegment[1];
+        const destHtml = `<div style="width: 14px; height: 14px; border-radius: 50%; background: ${COLORS.surface}; border: 3px solid ${COLORS.accent}; box-shadow: 0 0 10px rgba(249,201,53,0.5);"></div>`;
+        const destIcon = L.divIcon({ className: '', html: destHtml, iconSize: [14, 14], iconAnchor: [7, 7] });
+        L.marker(destPoint, { icon: destIcon }).addTo(group);
+      }
     });
 
     // 4. Riders
@@ -327,22 +419,47 @@ function OpsDashboard({ riders, trucks, zones, alerts, liveLogs, selectedZone, s
       L.marker([r.lat, r.lng], { icon }).addTo(group);
     });
 
-  }, [riders, trucks, zones, setHoveredZone, setSelectedZone]);
+    // 5. Track Active Target
+    if (trackedId) {
+      const target = trucks.find(t => t.id === trackedId) || riders.find(r => r.id === trackedId);
+      if (target) {
+        mapInstanceRef.current.panTo([target.lat, target.lng], { animate: true, duration: 2.5, easeLinearity: 1 });
+      } else {
+        setTrackedId(null);
+      }
+    }
+
+  }, [riders, trucks, zones, setHoveredZone, setSelectedZone, showHeatmap, trackedId]);
 
   return (
     <div style={{ display: 'flex', height: '100%', width: '100%' }}>
       {/* Left Sidebar */}
       <div className="hide-scrollbar" style={{ width: 280, background: COLORS.surface2, borderRight: `1px solid ${COLORS.border}`, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ padding: '16px 20px', borderBottom: `1px solid ${COLORS.border}` }}>
-          <div style={{ color: COLORS.accent, fontSize: 11, fontWeight: 'bold', letterSpacing: 1 }}>WORKERS</div>
+        <div style={{ padding: '16px', borderBottom: `1px solid ${COLORS.border}`, display: 'flex', gap: 8 }}>
+          <button 
+            onClick={() => setSidebarTab('TRUCKS')}
+            style={{ flex: 1, padding: '8px 0', background: sidebarTab === 'TRUCKS' ? COLORS.surface : 'transparent', color: sidebarTab === 'TRUCKS' ? COLORS.accent : COLORS.muted, border: `1px solid ${sidebarTab === 'TRUCKS' ? COLORS.accent : COLORS.border}`, borderRadius: 6, fontWeight: 800, fontSize: 12, cursor: 'pointer', transition: 'all 0.2s' }}>
+            TRUCKS ({trucks.length})
+          </button>
+          <button 
+            onClick={() => setSidebarTab('RIDERS')}
+            style={{ flex: 1, padding: '8px 0', background: sidebarTab === 'RIDERS' ? COLORS.surface : 'transparent', color: sidebarTab === 'RIDERS' ? COLORS.accent : COLORS.muted, border: `1px solid ${sidebarTab === 'RIDERS' ? COLORS.accent : COLORS.border}`, borderRadius: 6, fontWeight: 800, fontSize: 12, cursor: 'pointer', transition: 'all 0.2s' }}>
+            RIDERS ({riders.length})
+          </button>
         </div>
         
-        <div style={{ padding: '16px 20px 8px', color: COLORS.text, fontSize: 12, fontWeight: 'bold' }}>TRUCKS</div>
-        {trucks.map(t => (
+        {sidebarTab === 'TRUCKS' && trucks.map(t => (
           <div key={t.id} style={{ padding: '12px 20px', borderBottom: `1px solid ${COLORS.border}`, borderLeft: t.status === 'ALERT' ? `3px solid ${COLORS.red}` : '3px solid transparent' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-              <div style={{ width: 8, height: 8, borderRadius: '50%', background: t.status === 'ALERT' ? COLORS.red : COLORS.green }} />
-              <div style={{ fontWeight: 600, fontSize: 14 }}>{t.name}</div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ width: 8, height: 8, borderRadius: '50%', background: t.status === 'ALERT' ? COLORS.red : COLORS.green }} />
+                <div style={{ fontWeight: 600, fontSize: 14 }}>{t.name}</div>
+              </div>
+              <button 
+                onClick={() => setTrackedId(t.id === trackedId ? null : t.id)}
+                style={{ background: t.id === trackedId ? COLORS.accent : 'transparent', color: t.id === trackedId ? '#000' : COLORS.accent, border: `1px solid ${COLORS.accent}`, padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 800, cursor: 'pointer' }}>
+                {t.id === trackedId ? 'TRACKING' : 'TRACK'}
+              </button>
             </div>
             <div style={{ color: COLORS.muted, fontSize: 12, marginBottom: 8 }}>{t.route}</div>
             <div style={{ height: 4, background: '#333', borderRadius: 2, marginBottom: 8 }}>
@@ -355,13 +472,19 @@ function OpsDashboard({ riders, trucks, zones, alerts, liveLogs, selectedZone, s
           </div>
         ))}
 
-        <div style={{ padding: '24px 20px 8px', color: COLORS.text, fontSize: 12, fontWeight: 'bold' }}>RIDERS</div>
-        {sortedRiders.map(r => {
+        {sidebarTab === 'RIDERS' && sortedRiders.map(r => {
           const esc = (r.status === 'IDLE' || r.status === 'SOS') ? getEscalationStage(r.inactiveSec) : null;
           return (
             <div key={r.id} style={{ padding: '12px 20px', borderBottom: `1px solid ${COLORS.border}` }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                <div style={{ fontWeight: 600, fontSize: 14 }}>{r.name}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ fontWeight: 600, fontSize: 14 }}>{r.name}</div>
+                  <button 
+                    onClick={() => setTrackedId(r.id === trackedId ? null : r.id)}
+                    style={{ background: r.id === trackedId ? COLORS.accent : 'transparent', color: r.id === trackedId ? '#000' : COLORS.accent, border: `1px solid ${COLORS.accent}`, padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 800, cursor: 'pointer' }}>
+                    {r.id === trackedId ? 'TRACKING' : 'TRACK'}
+                  </button>
+                </div>
                 <div style={{ fontSize: 10, fontWeight: 'bold', padding: '2px 6px', borderRadius: 4, background: r.status === 'SOS' ? COLORS.red : r.status === 'ACTIVE' ? COLORS.green : r.status === 'SEEKING' ? COLORS.blue : COLORS.amber, color: r.status === 'ACTIVE' || r.status === 'SEEKING' ? COLORS.bg : '#fff' }}>
                   {r.status}
                 </div>
@@ -488,12 +611,15 @@ function AlertFeed({ alerts, liveLogs }) {
          })}
          
          <div style={{ color: COLORS.text, fontSize: 12, fontWeight: 'bold', marginTop: 24, marginBottom: 12 }}>LIVE EVENT LOG</div>
-         {liveLogs.map(l => (
-           <div key={l.id} style={{ marginBottom: 12, fontSize: 12 }}>
-             <span style={{ color: COLORS.accent, fontFamily: 'monospace', marginRight: 8 }}>[{formatTime(l.time)}]</span>
-             <span style={{ color: COLORS.muted }}>{l.msg}</span>
-           </div>
-         ))}
+         {liveLogs.map(l => {
+           const isCritical = l.msg.includes('C R I T I C A L');
+           return (
+             <div key={l.id} style={{ marginBottom: 12, fontSize: 13, background: isCritical ? 'rgba(239,68,68,0.1)' : 'transparent', padding: isCritical ? '8px 12px' : 0, borderRadius: 4, borderLeft: isCritical ? `3px solid ${COLORS.red}` : 'none' }}>
+               <span style={{ color: COLORS.accent, fontFamily: 'monospace', marginRight: 8, fontWeight: 'bold' }}>[{formatTime(l.time)}]</span>
+               <span style={{ color: isCritical ? COLORS.red : COLORS.muted, fontFamily: isCritical ? 'monospace' : 'inherit', fontWeight: isCritical ? 900 : 'normal' }}>{l.msg}</span>
+             </div>
+           );
+         })}
       </div>
     </>
   );
@@ -506,6 +632,7 @@ function RiderView() {
   const [holdProgress, setHoldProgress] = useState(0);
   const [showFlagSheet, setShowFlagSheet] = useState(false);
   const [flagBanner, setFlagBanner] = useState('');
+  const [buddyCheckedIn, setBuddyCheckedIn] = useState(false);
   const holdIntervalRef = useRef(null);
 
   const startHold = () => {
@@ -540,10 +667,23 @@ function RiderView() {
 
   return (
     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', background: COLORS.bg, overflowY: 'auto', padding: '20px 0' }}>
-      <div style={{ width: 390, height: 844, background: '#000', borderRadius: 36, border: `8px solid ${COLORS.surface2}`, boxShadow: `0 0 40px rgba(249,201,53,0.1)`, position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+      <div style={{ width: 390, height: 844, background: '#000', borderRadius: 36, border: `8px solid ${COLORS.surface2}`, boxShadow: `0 0 40px rgba(249,201,53,0.1)`, position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column', flexShrink: 0, animation: sosActivated ? 'meltdown 0.5s infinite alternate' : 'none' }}>
         
+        {sosActivated && (
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(239,68,68,0.4)', zIndex: 100, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 32 }}>
+            <div style={{ background: '#000', padding: 32, borderRadius: 24, border: `4px solid ${COLORS.red}`, textAlign: 'center', boxShadow: '0 0 40px rgba(239,68,68,0.5)', animation: 'pulseRedRing 1s infinite' }}>
+              <div style={{ color: COLORS.red, fontSize: 64, marginBottom: 16 }}>🚨</div>
+              <div style={{ color: COLORS.red, fontWeight: 900, fontSize: 24, letterSpacing: 1, marginBottom: 12 }}>DISPATCHER AWARE</div>
+              <div style={{ color: '#fff', fontSize: 14, fontWeight: 'bold', letterSpacing: 1 }}>POLICE DEPLOYED</div>
+              <div style={{ background: COLORS.surface2, padding: '12px 24px', borderRadius: 12, marginTop: 24, border: `1px solid ${COLORS.border}` }}>
+                <div style={{ color: COLORS.accent, fontSize: 24, fontWeight: 900 }}>ETA: 2 MINS</div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Status Bar */}
-        <div style={{ height: 44, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 24px', fontSize: 13, fontWeight: 'bold' }}>
+        <div style={{ height: 44, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 24px', fontSize: 13, fontWeight: 'bold', zIndex: 50, position: 'relative' }}>
           <span>14:30</span>
           <span style={{ color: COLORS.accent, letterSpacing: 1 }}>SAFEROUTE</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -575,15 +715,39 @@ function RiderView() {
           </div>
 
           {/* Buddy Card */}
-          <div style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 16, padding: 16 }}>
-            <div style={{ color: COLORS.muted, fontSize: 12, marginBottom: 12 }}>YOUR BUDDY</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ width: 40, height: 40, borderRadius: '50%', background: COLORS.accent, display: 'flex', justifyContent: 'center', alignItems: 'center', color: '#000', fontWeight: 'bold', fontSize: 16 }}>KR</div>
+          <div style={{ background: COLORS.surface, borderRadius: 20, padding: 20, boxShadow: '0 4px 24px rgba(0,0,0,0.4)', border: buddyCheckedIn ? `1px solid rgba(34, 197, 94, 0.3)` : `1px solid ${COLORS.surface2}` }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div style={{ color: COLORS.muted, fontSize: 12, fontWeight: 700, letterSpacing: 0.5 }}>YOUR ASSIGNED BUDDY</div>
+              {buddyCheckedIn ? (
+                <div style={{ background: 'rgba(34, 197, 94, 0.15)', color: COLORS.green, padding: '4px 10px', borderRadius: 100, fontSize: 11, fontWeight: 800, letterSpacing: 0.5 }}>
+                  ✓ SECURE
+                </div>
+              ) : null}
+            </div>
+            
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 20 }}>
+              <div style={{ width: 48, height: 48, borderRadius: '50%', background: COLORS.accent, display: 'flex', justifyContent: 'center', alignItems: 'center', color: '#000', fontWeight: 800, fontSize: 18, boxShadow: '0 4px 12px rgba(249,201,53,0.3)' }}>KR</div>
               <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 'bold', fontSize: 16 }}>Kavitha R</div>
-                <div style={{ color: COLORS.blue, fontSize: 12 }}>0.8 km away • Active</div>
+                <div style={{ fontWeight: 800, fontSize: 18, marginBottom: 4, letterSpacing: -0.5 }}>Kavitha R</div>
+                <div style={{ color: COLORS.accent, fontSize: 13, fontWeight: 600 }}>0.8 km away • Active</div>
               </div>
             </div>
+
+            <button 
+              onClick={() => setBuddyCheckedIn(true)}
+              disabled={buddyCheckedIn}
+              style={{ 
+                width: '100%', padding: '14px', 
+                background: buddyCheckedIn ? 'rgba(255,255,255,0.02)' : 'rgba(249, 201, 53, 0.1)', 
+                border: buddyCheckedIn ? 'none' : `1px solid ${COLORS.accent}`, 
+                borderRadius: 14, 
+                color: buddyCheckedIn ? COLORS.muted : COLORS.accent, 
+                fontWeight: 800, fontSize: 14, cursor: buddyCheckedIn ? 'default' : 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+            >
+              {buddyCheckedIn ? '✓ Safety Confirmed' : 'Ping Safety Confirmation'}
+            </button>
           </div>
 
           {/* Delivery Card */}
@@ -657,37 +821,99 @@ function RiderView() {
 
 // --- TAB 3: GOVT VIEWER ---
 
-function GovtViewer({ zones, alerts }) {
+function GovtViewer({ zones, alerts, tickerIndex }) {
   const sortedZones = [...zones].sort((a,b) => b.score - a.score);
 
   return (
     <div className="hide-scrollbar" style={{ height: '100%', overflowY: 'auto', padding: '32px 48px', maxWidth: 1200, margin: '0 auto' }}>
+      {/* Ticker - Uber/Ola Pill Style */}
+      <div style={{ background: '#1A0B0B', borderRadius: 100, marginBottom: 32, display: 'flex', alignItems: 'center', overflow: 'hidden', whiteSpace: 'nowrap', padding: 4, border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+        <div style={{ fontWeight: 800, zIndex: 2, color: '#000', background: COLORS.red, padding: '8px 20px', borderRadius: 100, fontSize: 11, letterSpacing: 0.5 }}>LIVE INTEL</div>
+        <div style={{ flex: 1, overflow: 'hidden', display: 'flex', alignItems: 'center', paddingLeft: 16 }}>
+           <div key={tickerIndex} style={{ fontWeight: 600, fontSize: 13, letterSpacing: 0.5, color: '#E5E7EB', paddingTop: 2, animation: 'fadeIn 0.5s ease-out' }}>
+             <span style={{ color: COLORS.red }}>●</span> {alerts[tickerIndex].type.replace(/_/g, ' ')} detected in {alerts[tickerIndex].zone} <span style={{ color: COLORS.muted }}>({alerts[tickerIndex].timeAgo})</span>
+           </div>
+        </div>
+      </div>
+
       <div style={{ marginBottom: 40 }}>
         <h1 style={{ color: COLORS.accent, margin: '0 0 8px 0', fontSize: 28 }}>Government Safety Dashboard</h1>
         <div style={{ color: COLORS.muted, fontSize: 14 }}>Read-only view • Integrated with ERSS 112 • Real-time verified telemetry</div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 24, marginBottom: 40 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 24, marginBottom: 32 }}>
         <GovCard label="Total Alerts (30d)" val="1,402" color={COLORS.text} />
         <GovCard label="Resolution Rate" val="98.5%" color={COLORS.green} />
         <GovCard label="Avg Resolution Time" val="3m 12s" color={COLORS.blue} />
         <GovCard label="Active Red Zones" val={zones.filter(z=>z.tier === 'RED').length} color={COLORS.red} />
       </div>
 
-      <div style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: 32, marginBottom: 40 }}>
-        <h2 style={{ fontSize: 18, margin: '0 0 24px 0', color: COLORS.text }}>City Zone Risk Scores</h2>
-        {sortedZones.map(z => {
-          const color = getTierColor(z.tier);
-          return (
-            <div key={z.id} style={{ display: 'flex', alignItems: 'center', marginBottom: 16 }}>
-              <div style={{ width: 140, fontSize: 14, fontWeight: 'bold', color: COLORS.text }}>{z.name}</div>
-              <div style={{ flex: 1, height: 12, background: '#222', borderRadius: 6, margin: '0 16px', overflow: 'hidden' }}>
-                <div style={{ height: '100%', background: color, width: `${z.score}%` }} />
-              </div>
-              <div style={{ width: 40, textAlign: 'right', fontSize: 14, fontWeight: 'bold', color: color }}>{z.score}</div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 24, marginBottom: 40 }}>
+        {/* Donut Chart: Alert Breakdown */}
+        <div style={{ background: COLORS.surface, borderRadius: 24, padding: 32, boxShadow: '0 4px 24px rgba(0,0,0,0.4)' }}>
+          <h2 style={{ fontSize: 18, margin: '0 0 32px 0', color: COLORS.text, fontWeight: 700 }}>Alert Diagnostics</h2>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 180, position: 'relative' }}>
+            <svg viewBox="0 0 36 36" style={{ height: '100%', transform: 'rotate(-90deg)' }}>
+              <circle cx="18" cy="18" r="15.915" fill="transparent" stroke={COLORS.surface2} strokeWidth="3" />
+              <circle cx="18" cy="18" r="15.915" fill="transparent" stroke={COLORS.red} strokeWidth="3" strokeDasharray="45 100" />
+              <circle cx="18" cy="18" r="15.915" fill="transparent" stroke={COLORS.amber} strokeWidth="3" strokeDasharray="30 100" strokeDashoffset="-45" />
+              <circle cx="18" cy="18" r="15.915" fill="transparent" stroke={COLORS.blue} strokeWidth="3" strokeDasharray="25 100" strokeDashoffset="-75" />
+            </svg>
+            <div style={{ position: 'absolute', textAlign: 'center' }}>
+              <div style={{ fontSize: 28, fontWeight: 800, color: COLORS.text, letterSpacing: -1 }}>142</div>
+              <div style={{ fontSize: 11, color: COLORS.muted, fontWeight: 600 }}>THIS WK</div>
             </div>
-          );
-        })}
+          </div>
+          <div style={{ marginTop: 32, display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13 }}><div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><div style={{ width: 8, height: 8, borderRadius: 4, background: COLORS.red }} /> <span style={{ color: COLORS.text, fontWeight: 500 }}>Prolonged SOS</span></div><span style={{ fontWeight: 700, color: COLORS.text }}>45%</span></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13 }}><div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><div style={{ width: 8, height: 8, borderRadius: 4, background: COLORS.amber }} /> <span style={{ color: COLORS.text, fontWeight: 500 }}>Route Deviation</span></div><span style={{ fontWeight: 700, color: COLORS.text }}>30%</span></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13 }}><div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><div style={{ width: 8, height: 8, borderRadius: 4, background: COLORS.blue }} /> <span style={{ color: COLORS.text, fontWeight: 500 }}>Manual Flag</span></div><span style={{ fontWeight: 700, color: COLORS.text }}>25%</span></div>
+          </div>
+        </div>
+
+        {/* Line Chart: 7-Day Trend */}
+        <div style={{ background: COLORS.surface, borderRadius: 24, padding: 32, boxShadow: '0 4px 24px rgba(0,0,0,0.4)' }}>
+          <h2 style={{ fontSize: 18, margin: '0 0 24px 0', color: COLORS.text, fontWeight: 700 }}>7-Day Network Threat Trend</h2>
+          <div style={{ height: 220, position: 'relative', display: 'flex', alignItems: 'flex-end', paddingTop: 20 }}>
+            <svg viewBox="0 0 600 200" style={{ width: '100%', height: '100%', overflow: 'visible' }}>
+              <defs>
+                <linearGradient id="glow" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={COLORS.accent} stopOpacity="0.3" />
+                  <stop offset="100%" stopColor={COLORS.surface2} stopOpacity="0" />
+                </linearGradient>
+              </defs>
+              <path d="M0,150 L100,120 L200,160 L300,90 L400,110 L500,40 L600,60 L600,200 L0,200 Z" fill="url(#glow)" />
+              <polyline points="0,150 100,120 200,160 300,90 400,110 500,40 600,60" fill="none" stroke={COLORS.accent} strokeWidth="3" />
+              {[ [0,150],[100,120],[200,160],[300,90],[400,110],[500,40],[600,60] ].map((pt, i) => (
+                <circle key={i} cx={pt[0]} cy={pt[1]} r="5" fill={COLORS.accent} style={{ filter: `drop-shadow(0 0 6px ${COLORS.accent})` }} />
+              ))}
+            </svg>
+            <div style={{ position: 'absolute', bottom: -24, left: 0, right: 0, display: 'flex', justifyContent: 'space-between', color: COLORS.muted, fontSize: 11, fontWeight: 'bold' }}>
+              <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ background: COLORS.surface, borderRadius: 24, padding: 32, marginBottom: 40, boxShadow: '0 4px 24px rgba(0,0,0,0.4)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
+          <h2 style={{ fontSize: 18, margin: 0, color: COLORS.text, fontWeight: 700 }}>Top Critical Zones</h2>
+          <div style={{ background: COLORS.surface2, padding: '6px 12px', borderRadius: 100, fontSize: 11, color: COLORS.muted, fontWeight: 600 }}>TOP 5 HIGHEST RISK</div>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          {sortedZones.slice(0, 5).map(z => {
+            const color = getTierColor(z.tier);
+            return (
+              <div key={z.id} style={{ display: 'flex', alignItems: 'center' }}>
+                <div style={{ width: 150, fontSize: 15, fontWeight: 600, color: COLORS.text }}>{z.name}</div>
+                <div style={{ flex: 1, height: 8, background: '#222', borderRadius: 100, margin: '0 20px', overflow: 'hidden' }}>
+                  <div style={{ height: '100%', background: color, width: `${z.score}%`, borderRadius: 100 }} />
+                </div>
+                <div style={{ width: 40, textAlign: 'right', fontSize: 15, fontWeight: 700, color: color }}>{z.score}</div>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       <div style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: 32 }}>
@@ -729,9 +955,9 @@ function GovtViewer({ zones, alerts }) {
 
 function GovCard({ label, val, color }) {
   return (
-    <div style={{ background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: 24 }}>
-      <div style={{ fontSize: 32, fontWeight: 'bold', color: color, marginBottom: 8 }}>{val}</div>
-      <div style={{ fontSize: 13, color: COLORS.muted, fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</div>
+    <div style={{ background: COLORS.surface, borderRadius: 24, padding: 24, boxShadow: '0 4px 24px rgba(0,0,0,0.4)', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+      <div style={{ fontSize: 36, fontWeight: 800, color: color, marginBottom: 4, letterSpacing: -1 }}>{val}</div>
+      <div style={{ fontSize: 12, color: COLORS.muted, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</div>
     </div>
   );
 }
